@@ -209,11 +209,11 @@ const [assetSearchLoading, setAssetSearchLoading] = useState(false);
   const loadInventory = async () => {
     try {
       const response = await fetch(
-        "https://sru-inventory-system-vinay-2026.onrender.com"
+        `${API_BASE_URL}/inventory`
       );
       const data = await response.json();
 
-      setInventory(data);
+      setInventory(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -279,7 +279,7 @@ const searchAsset = async () => {
 
       const data = await response.json();
 
-      setAssets(data);
+      setAssets(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -297,7 +297,7 @@ const searchAsset = async () => {
 
       const data = await response.json();
 
-      setRooms(data);
+      setRooms(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -317,7 +317,7 @@ const searchAsset = async () => {
 
       const data = await response.json();
 
-      setRoomAssets(data);
+      setRoomAssets(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -335,7 +335,7 @@ const searchAsset = async () => {
 
       const data = await response.json();
 
-      setRoomAssetReport(data);
+      setRoomAssetReport(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -358,7 +358,7 @@ const searchAsset = async () => {
       }
 
       const data = await response.json();
-      setAiPredictions(data);
+      setAiPredictions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
       setAiPredictions([]);
