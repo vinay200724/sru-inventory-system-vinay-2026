@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, Depends, HTTPException
 
@@ -38,7 +41,7 @@ pwd_context = CryptContext(
 
 # =========================================================
 
-SECRET_KEY = "smart-inventory-sru-secret-2026"
+SECRET_KEY = os.getenv("SECRET_KEY", "smart-inventory-sru-secret-2026")
 
 ALGORITHM = "HS256"
 
@@ -107,24 +110,47 @@ def require_admin(current_user: dict):
 # DATABASE CONNECTION
 
 # =========================================================
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
-connection_url = URL.create(
+if DATABASE_URL:
+    # SQLAlchemy requires 'mysql+pymysql://' for PyMySQL driver
+    if DATABASE_URL.startswith("mysql://"):
+        DATABASE_URL = DATABASE_URL.replace("mysql://", "mysql+pymysql://", 1)
 
-    drivername="mysql+pymysql",
+    connect_args = {}
+    if "tidbcloud" in DATABASE_URL.lower():
+        ca_cert_path = "/etc/ssl/certs/ca-certificates.crt"
+        if os.path.exists(ca_cert_path):
+            connect_args = {"ssl": {"ca": ca_cert_path}}
+        else:
+            connect_args = {"ssl_verify_cert": True}
 
-    username="root",
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args=connect_args,
+        pool_pre_ping=True,
+        pool_recycle=300
+    )
+else:
+    db_host = os.getenv("DB_HOST", "127.0.0.1")
+    db_port = int(os.getenv("DB_PORT", "3306"))
+    db_user = os.getenv("DB_USER", "root")
+    db_password = os.getenv("DB_PASSWORD", "gayathreyini@123")
+    db_name = os.getenv("DB_NAME", "smart_inventory")
 
-    password="gayathreyini@123",
-
-    host="127.0.0.1",
-
-    port=3306,
-
-    database="smart_inventory"
-
-)
-
-engine = create_engine(connection_url)
+    connection_url = URL.create(
+        drivername="mysql+pymysql",
+        username=db_user,
+        password=db_password,
+        host=db_host,
+        port=db_port,
+        database=db_name
+    )
+    engine = create_engine(
+        connection_url,
+        pool_pre_ping=True,
+        pool_recycle=300
+    )
 
 # =========================================================
 
@@ -154,17 +180,22 @@ allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
-    "http://127.0.0.1:5174"
+    "http://127.0.0.1:5174",
+    "https://sru-inventory-system-vinay-2026-delta.vercel.app"
 ]
 
 if frontend_url:
-    allowed_origins.append(frontend_url)
+    for url in frontend_url.split(","):
+        cleaned = url.strip().rstrip("/")
+        if cleaned:
+            allowed_origins.append(cleaned)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(dict.fromkeys(allowed_origins)),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"]
 )
 
@@ -243,6 +274,24 @@ def home():
 
 # =========================================================
 
+def init_db():
+    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    if os.path.exists(schema_path):
+        try:
+            with open(schema_path, "r", encoding="utf-8") as f:
+                raw_sql = f.read()
+            statements = [stmt.strip() for stmt in raw_sql.split(";") if stmt.strip()]
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print("Database schema verified / initialized from schema.sql")
+        except Exception as exc:
+            print(f"Database schema auto-init warning: {exc}")
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
 # DATABASE TEST
 
 # =========================================================
@@ -250,20 +299,19 @@ def home():
 @app.get("/database-test")
 
 def database_test():
-
-    with engine.connect() as connection:
-
-        connection.execute(
-
-            text("SELECT 1")
-
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {
+            "status": "connected",
+            "message": "MySQL / TiDB database connected successfully"
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database connection failed: {str(exc)}"
         )
 
-    return {
-
-        "message": "MySQL database connected successfully"
-
-    }
 
 # =========================================================
 
@@ -1840,10 +1888,12 @@ if __name__ == "__main__":
 
         "main:app",
 
-        host="127.0.0.1",
+    
 
-        port=8000,
 
-        reload=True
+
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000)),
+        reload=False
 
     )

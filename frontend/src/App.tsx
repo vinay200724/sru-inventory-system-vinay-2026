@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Login from "./login";
 import Register from "./Register";
+import { API_BASE_URL } from "./config";
 
 type InventoryItem = {
   id: number;
@@ -238,7 +239,7 @@ const searchAsset = async () => {
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/search-assets?search=${encodeURIComponent(
+      `${API_BASE_URL}/search-assets?search=${encodeURIComponent(
         searchText
       )}`
     );
@@ -273,7 +274,7 @@ const searchAsset = async () => {
   const loadAssets = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/assets"
+        `${API_BASE_URL}/assets`
       );
 
       const data = await response.json();
@@ -291,7 +292,7 @@ const searchAsset = async () => {
   const loadRooms = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/rooms"
+        `${API_BASE_URL}/rooms`
       );
 
       const data = await response.json();
@@ -311,7 +312,7 @@ const searchAsset = async () => {
   ) => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/rooms/${roomId}/assets`
+        `${API_BASE_URL}/rooms/${roomId}/assets`
       );
 
       const data = await response.json();
@@ -329,7 +330,7 @@ const searchAsset = async () => {
   const loadRoomAssetReport = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/room-assets-report"
+        `${API_BASE_URL}/room-assets-report`
       );
 
       const data = await response.json();
@@ -349,7 +350,7 @@ const searchAsset = async () => {
       setAiPredictionLoading(true);
 
       const response = await fetch(
-        "http://127.0.0.1:8000/ai-prediction"
+        `${API_BASE_URL}/ai-prediction`
       );
 
       if (!response.ok) {
@@ -378,7 +379,7 @@ const searchAsset = async () => {
 
     try {
       const endpoint = isAdmin ? "/feedback" : "/my-feedback";
-      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: { ...authHeaders() }
       });
 
@@ -403,7 +404,7 @@ const searchAsset = async () => {
     }
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/feedback", {
+      const response = await fetch(`${API_BASE_URL}/feedback`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -633,7 +634,7 @@ const searchAsset = async () => {
         editingInventoryId !== null
       ) {
         await fetch(
-          `http://127.0.0.1:8000/inventory/${editingInventoryId}`,
+          `${API_BASE_URL}/inventory/${editingInventoryId}`,
           {
             method: "PUT",
             headers: {
@@ -656,7 +657,7 @@ const searchAsset = async () => {
         );
       } else {
         await fetch(
-          "http://127.0.0.1:8000/inventory",
+          `${API_BASE_URL}/inventory`,
           {
             method: "POST",
             headers: {
@@ -718,7 +719,7 @@ const searchAsset = async () => {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/inventory/${id}`,
+        `${API_BASE_URL}/inventory/${id}`,
         {
           method: "DELETE",
           headers: { ...authHeaders() }
@@ -777,7 +778,7 @@ const saveAsset = async () => {
 
     if (editingAssetId !== null) {
       response = await fetch(
-        `http://127.0.0.1:8000/assets/${editingAssetId}`,
+        `${API_BASE_URL}/assets/${editingAssetId}`,
         {
           method: "PUT",
           headers: {
@@ -793,7 +794,7 @@ const saveAsset = async () => {
       );
     } else {
       response = await fetch(
-        "http://127.0.0.1:8000/assets",
+        `${API_BASE_URL}/assets`,
         {
           method: "POST",
           headers: {
@@ -855,7 +856,7 @@ const deleteAsset = async (id: string) => {
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/assets/${encodeURIComponent(id)}`,
+      `${API_BASE_URL}/assets/${encodeURIComponent(id)}`,
       {
         method: "DELETE",
         headers: { ...authHeaders() }
@@ -963,7 +964,7 @@ const saveRoomAsset = async () => {
 
     if (editingRoomAssetId !== null) {
       response = await fetch(
-        `http://127.0.0.1:8000/room-assets/${editingRoomAssetId}`,
+        `${API_BASE_URL}/room-assets/${editingRoomAssetId}`,
         {
           method: "PUT",
           headers: {
@@ -981,7 +982,7 @@ const saveRoomAsset = async () => {
       );
     } else {
       response = await fetch(
-        "http://127.0.0.1:8000/room-assets",
+        `${API_BASE_URL}/room-assets`,
         {
           method: "POST",
           headers: {
@@ -1060,7 +1061,7 @@ const deleteRoomAsset = async (id: number) => {
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/room-assets/${id}`,
+      `${API_BASE_URL}/room-assets/${id}`,
       {
         method: "DELETE",
         headers: { ...authHeaders() }
