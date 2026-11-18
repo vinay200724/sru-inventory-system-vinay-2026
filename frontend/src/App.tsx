@@ -31,14 +31,15 @@ type RoomAsset = {
   room_id: number;
   asset_code: string;
   asset_name: string;
+  category: string;
   quantity: number;
   status: string;
 };
-
 type AssetSearchResult = {
   id: number;
   asset_code: string;
   asset_name: string;
+  category: string;
   quantity: number;
   status: string;
   block_no: number;
@@ -77,6 +78,14 @@ type AIPredictionItem = {
   status: string;
   prediction: string;
   recommendation: string;
+};
+
+type FeedbackItem = {
+  id: number;
+  student_id: number;
+  student_name: string;
+  message: string;
+  created_at: string;
 };
 
 function App() {
@@ -139,14 +148,20 @@ function App() {
   const [selectedRoomId, setSelectedRoomId] =
     useState<number | null>(null);
 
+  const [roomAssetDestinationId, setRoomAssetDestinationId] =
+    useState<number | null>(null);
+
   const [roomAssetName, setRoomAssetName] =
+    useState("");
+
+  const [roomAssetCategory, setRoomAssetCategory] =
     useState("");
 
   const [roomAssetQuantity, setRoomAssetQuantity] =
     useState("");
 
   const [roomAssetStatus, setRoomAssetStatus] =
-    useState("Good");
+    useState("Working");
 
   const [search, setSearch] =
     useState("");
@@ -181,6 +196,11 @@ const [assetSearchResult, setAssetSearchResult] =
 const [assetSearchMessage, setAssetSearchMessage] = useState("");
 const [assetSearchLoading, setAssetSearchLoading] = useState(false);
 
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
+
   /* =========================
      LOAD INVENTORY
      ========================= */
@@ -188,7 +208,7 @@ const [assetSearchLoading, setAssetSearchLoading] = useState(false);
   const loadInventory = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/inventory"
+        "https://sru-inventory-system-vinay-2026.onrender.com"
       );
       const data = await response.json();
 
@@ -345,6 +365,69 @@ const searchAsset = async () => {
       setAiPredictionLoading(false);
     }
   };
+
+  /* =========================
+     FEEDBACK
+     ========================= */
+
+  const loadFeedback = async () => {
+    if (!currentUser?.access_token) return;
+
+    setFeedbackLoading(true);
+    setFeedbackError("");
+
+    try {
+      const endpoint = isAdmin ? "/feedback" : "/my-feedback";
+      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+        headers: { ...authHeaders() }
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Unable to load feedback");
+      }
+      setFeedbackItems(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : "Unable to load feedback");
+      setFeedbackItems([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  const submitFeedback = async () => {
+    const message = feedbackMessage.trim();
+    if (!message) {
+      alert("Please enter your feedback");
+      return;
+    }
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders()
+        },
+        body: JSON.stringify({ message })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Unable to submit feedback");
+      }
+      setFeedbackMessage("");
+      alert("Feedback submitted successfully");
+      await loadFeedback();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to submit feedback");
+    }
+  };
+
+  useEffect(() => {
+    if (loggedIn && activePage === "Feedback") {
+      loadFeedback();
+    }
+  }, [loggedIn, activePage, currentUser]);
 
   /* =========================
      LOAD DATA
@@ -630,35 +713,29 @@ const searchAsset = async () => {
      DELETE INVENTORY
      ========================= */
 
-  const deleteInventory = async (
-    id: number
-  ) => {
-    const confirmDelete =
-      confirm(
-        "Are you sure you want to delete this inventory item?"
-      );
-
-    if (!confirmDelete) {
-      return;
-    }
+  const deleteInventory = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this inventory item?")) return;
 
     try {
-      await fetch(
+      const response = await fetch(
         `http://127.0.0.1:8000/inventory/${id}`,
         {
           method: "DELETE",
-          headers: {
-            ...authHeaders()
-          }
+          headers: { ...authHeaders() }
         }
       );
 
-      loadInventory();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        alert(data.detail || data.message || "Unable to delete inventory item");
+        return;
+      }
+
+      alert(data.message || "Inventory item deleted successfully");
+      await loadInventory();
     } catch (error) {
-      console.log(error);
-      alert(
-        "Unable to connect to server"
-      );
+      console.error("Inventory delete error:", error);
+      alert("Unable to connect to server");
     }
   };
 
@@ -678,146 +755,126 @@ const searchAsset = async () => {
      SAVE ASSET
      ========================= */
 
-  const saveAsset = async () => {
-    if (!assetId.trim()) {
-      alert("Asset ID is required");
-      return;
+ 
+const saveAsset = async () => {
+  if (!assetId.trim()) {
+    alert("Asset ID is required");
+    return;
+  }
+
+  if (!assetName.trim()) {
+    alert("Asset name is required");
+    return;
+  }
+
+  if (!location.trim()) {
+    alert("Location is required");
+    return;
+  }
+
+  try {
+    let response;
+
+    if (editingAssetId !== null) {
+      response = await fetch(
+        `http://127.0.0.1:8000/assets/${editingAssetId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            asset_name: assetName,
+            location: location,
+            status: assetStatus
+          })
+        }
+      );
+    } else {
+      response = await fetch(
+        "http://127.0.0.1:8000/assets",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            asset_id: assetId,
+            asset_name: assetName,
+            location: location,
+            status: assetStatus
+          })
+        }
+      );
     }
 
-    if (!assetName.trim()) {
+    if (!response.ok) {
+      const errorData = await response.json();
       alert(
-        "Asset name is required"
+        errorData.detail || "Unable to save asset"
       );
       return;
     }
 
-    if (!location.trim()) {
-      alert("Location is required");
-      return;
-    }
-
-    try {
-      if (
-        editingAssetId !== null
-      ) {
-        await fetch(
-          `http://127.0.0.1:8000/assets/${editingAssetId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              asset_name:
-                assetName,
-              location:
-                location,
-              status:
-                assetStatus
-            })
-          }
-        );
-
-        alert(
-          "Asset updated successfully"
-        );
-      } else {
-        await fetch(
-          "http://127.0.0.1:8000/assets",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              asset_id: assetId,
-              asset_name:
-                assetName,
-              location:
-                location,
-              status:
-                assetStatus
-            })
-          }
-        );
-
-        alert(
-          "Asset added successfully"
-        );
-      }
-
-      clearAssetForm();
-      loadAssets();
-    } catch (error) {
-      console.log(error);
-      alert(
-        "Unable to connect to server"
-      );
-    }
-  };
-
-  /* =========================
-     EDIT ASSET
-     ========================= */
-
-  const editAsset = (
-    asset: AssetItem
-  ) => {
-    setEditingAssetId(
-      asset.asset_id
+    alert(
+      editingAssetId !== null
+        ? "Asset updated successfully"
+        : "Asset added successfully"
     );
 
-    setAssetId(
-      asset.asset_id
-    );
+    clearAssetForm();
+    loadAssets();
 
-    setAssetName(
-      asset.asset_name
-    );
+  } catch (error) {
+    console.log(error);
+    alert("Unable to connect to server");
+  }
+};
 
-    setLocation(
-      asset.location
-    );
+/* =========================
+   EDIT ASSET
+   ========================= */
 
-    setAssetStatus(
-      asset.status
-    );
-  };
+const editAsset = (asset: AssetItem) => {
+  setEditingAssetId(asset.asset_id);
+  setAssetId(asset.asset_id);
+  setAssetName(asset.asset_name);
+  setLocation(asset.location);
+  setAssetStatus(asset.status);
+};
+
 
   /* =========================
      DELETE ASSET
      ========================= */
 
-  const deleteAsset = async (
-    id: string
-  ) => {
-    const confirmDelete =
-      confirm(
-        "Are you sure you want to delete this asset?"
-      );
+const deleteAsset = async (id: string) => {
+  if (!confirm("Are you sure you want to delete this asset?")) return;
 
-    if (!confirmDelete) {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:8000/assets/${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        headers: { ...authHeaders() }
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      alert(data.detail || data.message || "Unable to delete asset");
       return;
     }
 
-    try {
-      await fetch(
-        `http://127.0.0.1:8000/assets/${id}`,
-        {
-          method: "DELETE"
-        }
-      );
-
-      loadAssets();
-    } catch (error) {
-      console.log(error);
-      alert(
-        "Unable to connect to server"
-      );
-    }
-  };
+    alert(data.message || "Asset deleted successfully");
+    await loadAssets();
+  } catch (error) {
+    console.error("Asset delete error:", error);
+    alert("Unable to connect to server");
+  }
+};
 
   /* =========================
      CLEAR ASSET
@@ -863,176 +920,170 @@ const searchAsset = async () => {
      SAVE ROOM ASSET
      ========================= */
 
-  const saveRoomAsset = async () => {
-    if (
-      selectedRoomId === null
-    ) {
+  
+const saveRoomAsset = async () => {
+  if (selectedRoomId === null) {
+    alert("Please select a room");
+    return;
+  }
+
+  if (!roomAssetName.trim()) {
+    alert("Asset name is required");
+    return;
+  }
+
+  if (!roomAssetCategory.trim()) {
+    alert("Asset category is required");
+    return;
+  }
+
+  if (roomAssetQuantity === "") {
+    alert("Quantity is required");
+    return;
+  }
+
+  const qty = Number(roomAssetQuantity);
+  if (!Number.isInteger(qty) || qty < 0) {
+    alert("Enter a valid non-negative quantity");
+    return;
+  }
+
+  const destinationRoomId =
+    editingRoomAssetId !== null
+      ? roomAssetDestinationId
+      : selectedRoomId;
+
+  if (destinationRoomId === null) {
+    alert("Please select a destination room");
+    return;
+  }
+
+  try {
+    let response: Response;
+
+    if (editingRoomAssetId !== null) {
+      response = await fetch(
+        `http://127.0.0.1:8000/room-assets/${editingRoomAssetId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            room_id: destinationRoomId,
+            asset_name: roomAssetName.trim(),
+            category: roomAssetCategory.trim(),
+            quantity: qty,
+            status: roomAssetStatus
+          })
+        }
+      );
+    } else {
+      response = await fetch(
+        "http://127.0.0.1:8000/room-assets",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            room_id: selectedRoomId,
+            asset_name: roomAssetName.trim(),
+            category: roomAssetCategory.trim(),
+            quantity: qty,
+            status: roomAssetStatus
+          })
+        }
+      );
+    }
+
+    const responseData = await response.json().catch(() => ({}));
+    if (!response.ok) {
       alert(
-        "Please select a room"
+        responseData.detail ||
+        responseData.message ||
+        "Unable to save room asset"
       );
       return;
     }
 
-    if (
-      !roomAssetName.trim()
-    ) {
-      alert(
-        "Asset name is required"
-      );
-      return;
+    const wasMovingAsset = editingRoomAssetId !== null;
+    clearRoomAssetForm();
+
+    if (wasMovingAsset) {
+      setSelectedRoomId(destinationRoomId);
+      await loadRoomAssets(destinationRoomId);
+      alert("Room asset updated and moved to the selected room successfully");
+    } else {
+      await loadRoomAssets(selectedRoomId);
+      alert("Room asset added successfully");
     }
 
-    if (
-      roomAssetQuantity === ""
-    ) {
-      alert(
-        "Quantity is required"
-      );
-      return;
-    }
+    await loadRoomAssetReport();
+  } catch (error) {
+    console.error("Room asset save error:", error);
+    alert("Unable to connect to server");
+  }
+};
 
-    const qty = Number(
-      roomAssetQuantity
-    );
-
-    if (qty < 0) {
-      alert(
-        "Quantity cannot be negative"
-      );
-      return;
-    }
-
-    try {
-      if (
-        editingRoomAssetId !==
-        null
-      ) {
-        await fetch(
-          `http://127.0.0.1:8000/room-assets/${editingRoomAssetId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              asset_name:
-                roomAssetName,
-              quantity: qty,
-              status:
-                roomAssetStatus
-            })
-          }
-        );
-
-        alert(
-          "Room asset updated successfully"
-        );
-      } else {
-        await fetch(
-          "http://127.0.0.1:8000/room-assets",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              room_id:
-                selectedRoomId,
-              asset_name:
-                roomAssetName,
-              quantity: qty,
-              status:
-                roomAssetStatus
-            })
-          }
-        );
-
-        alert(
-          "Room asset added successfully"
-        );
-      }
-
-      clearRoomAssetForm();
-
-      await loadRoomAssets(
-        selectedRoomId
-      );
-
-      await loadRoomAssetReport();
-    } catch (error) {
-      console.log(error);
-      alert(
-        "Unable to connect to server"
-      );
-    }
-  };
 
   /* =========================
      EDIT ROOM ASSET
      ========================= */
 
-  const editRoomAsset = (
-    asset: RoomAsset
-  ) => {
-    setEditingRoomAssetId(
-      asset.id
-    );
+  
+const editRoomAsset = (asset: RoomAsset) => {
+  setEditingRoomAssetId(asset.id);
+  setRoomAssetName(asset.asset_name);
+  setRoomAssetCategory(asset.category || "General");
+  setRoomAssetQuantity(String(asset.quantity));
+  const normalizedStatus =
+    asset.status === "Good" ? "Working" :
+    asset.status === "Needs Repair" ? "Repair" :
+    asset.status === "Damaged" || asset.status === "Not Available"
+      ? "Not Working"
+      : asset.status || "Working";
 
-    setRoomAssetName(
-      asset.asset_name
-    );
+  setRoomAssetStatus(normalizedStatus);
+  setRoomAssetDestinationId(asset.room_id);
+};
 
-    setRoomAssetQuantity(
-      String(asset.quantity)
-    );
-
-    setRoomAssetStatus(
-      asset.status
-    );
-  };
 
   /* =========================
      DELETE ROOM ASSET
      ========================= */
 
-  const deleteRoomAsset = async (
-    id: number
-  ) => {
-    const confirmDelete =
-      confirm(
-        "Are you sure you want to delete this room asset?"
-      );
+const deleteRoomAsset = async (id: number) => {
+  if (!confirm("Are you sure you want to delete this room asset?")) return;
 
-    if (!confirmDelete) {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:8000/room-assets/${id}`,
+      {
+        method: "DELETE",
+        headers: { ...authHeaders() }
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      alert(data.detail || data.message || "Unable to delete room asset");
       return;
     }
 
-    try {
-      await fetch(
-        `http://127.0.0.1:8000/room-assets/${id}`,
-        {
-          method: "DELETE"
-        }
-      );
+    alert(data.message || "Room asset deleted successfully");
 
-      if (
-        selectedRoomId !== null
-      ) {
-        await loadRoomAssets(
-          selectedRoomId
-        );
-      }
-
-      await loadRoomAssetReport();
-    } catch (error) {
-      console.log(error);
-      alert(
-        "Unable to connect to server"
-      );
+    if (selectedRoomId !== null) {
+      await loadRoomAssets(selectedRoomId);
     }
-  };
+    await loadRoomAssetReport();
+  } catch (error) {
+    console.error("Room asset delete error:", error);
+    alert("Unable to connect to server");
+  }
+};
 
   /* =========================
      CLEAR ROOM ASSET
@@ -1040,13 +1091,11 @@ const searchAsset = async () => {
 
   const clearRoomAssetForm = () => {
     setRoomAssetName("");
+    setRoomAssetCategory("");
     setRoomAssetQuantity("");
-    setRoomAssetStatus(
-      "Good"
-    );
-    setEditingRoomAssetId(
-      null
-    );
+    setRoomAssetStatus("Working");
+    setRoomAssetDestinationId(null);
+    setEditingRoomAssetId(null);
   };
 
   /* =========================
@@ -1259,6 +1308,290 @@ const searchAsset = async () => {
   return (
     <div className="app">
 
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+        .app {
+          min-height: 100vh;
+          background: #f3f6fb;
+          color: #17243b;
+          font-family: 'DM Sans', 'Segoe UI', sans-serif;
+        }
+        .navbar {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 16px;
+          padding: 15px clamp(18px, 4vw, 54px);
+          background: linear-gradient(110deg, #102b50 0%, #174b72 58%, #087e8b 100%);
+          color: #fff;
+          box-shadow: 0 8px 28px rgba(15, 42, 75, .18);
+          border-bottom: 1px solid rgba(255,255,255,.15);
+        }
+        .logo {
+          color: #fff;
+          font-family: 'Manrope', sans-serif;
+          font-size: 21px;
+          font-weight: 800;
+          letter-spacing: -.5px;
+          white-space: nowrap;
+        }
+        .navbar > div[style*="margin-left"] {
+          margin-left: auto !important;
+          margin-right: 4px !important;
+          padding: 8px 13px;
+          border: 1px solid rgba(255,255,255,.22);
+          border-radius: 999px;
+          background: rgba(255,255,255,.12);
+          color: #fff;
+          font-size: 13px;
+        }
+        .nav-links {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 7px;
+        }
+        .nav-links button {
+          border: 1px solid transparent;
+          border-radius: 10px;
+          padding: 9px 13px;
+          background: transparent;
+          color: rgba(255,255,255,.88);
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: .2s ease;
+        }
+        .nav-links button:hover, .nav-links button.active-nav {
+          background: rgba(255,255,255,.17);
+          border-color: rgba(255,255,255,.22);
+          color: #fff;
+          transform: translateY(-1px);
+        }
+        .container {
+          width: min(1440px, calc(100% - 44px));
+          margin: 0 auto;
+          padding: 34px 0 56px;
+        }
+        .container > h1 {
+          margin: 0 0 8px;
+          color: #142b4b;
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(27px, 3vw, 36px);
+          font-weight: 800;
+          letter-spacing: -1.1px;
+        }
+        .welcome-text {
+          margin: 8px 0 4px;
+          color: #38516f;
+          font-size: 17px;
+          font-weight: 600;
+        }
+        .subtitle {
+          margin: 8px 0 25px;
+          color: #718096;
+          font-size: 14px;
+          line-height: 1.7;
+        }
+        .section, .form-section {
+          margin: 22px 0;
+          padding: clamp(18px, 2.4vw, 27px);
+          border: 1px solid #e3eaf3;
+          border-radius: 18px;
+          background: #fff;
+          box-shadow: 0 8px 26px rgba(31, 55, 86, .055);
+        }
+        .section h2, .form-section h2 {
+          margin: 0 0 17px;
+          color: #183653;
+          font-family: 'Manrope', sans-serif;
+          font-size: 19px;
+          font-weight: 800;
+          letter-spacing: -.35px;
+        }
+        .section h3, .form-section h3 {
+          color: #244663;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+        }
+        .cards {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+          gap: 17px;
+          margin: 22px 0;
+        }
+        .card {
+          position: relative;
+          overflow: hidden;
+          min-height: 132px;
+          padding: 21px 22px;
+          border: 1px solid #e1eaf3;
+          border-radius: 17px;
+          background: linear-gradient(145deg, #fff 0%, #f8fbff 100%);
+          box-shadow: 0 7px 22px rgba(25, 55, 88, .06);
+          transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .card::after {
+          content: "";
+          position: absolute;
+          width: 78px;
+          height: 78px;
+          right: -22px;
+          top: -25px;
+          border-radius: 50%;
+          background: rgba(14, 151, 163, .08);
+        }
+        .card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 13px 28px rgba(25, 55, 88, .11);
+        }
+        .card h3 {
+          position: relative;
+          z-index: 1;
+          margin: 0 0 10px;
+          color: #64758b;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .card h2 {
+          position: relative;
+          z-index: 1;
+          margin: 0;
+          color: #087f8c;
+          font-family: 'Manrope', sans-serif;
+          font-size: 31px;
+          font-weight: 800;
+          letter-spacing: -.8px;
+        }
+        .card p {
+          position: relative;
+          z-index: 1;
+          margin: 7px 0 0;
+          color: #8795a8;
+          font-size: 12px;
+        }
+        .app button {
+          border: 0;
+          border-radius: 10px;
+          padding: 10px 16px;
+          background: linear-gradient(110deg, #087f8c, #126b91);
+          color: #fff;
+          font-family: inherit;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 4px 10px rgba(8, 127, 140, .13);
+          transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+        }
+        .app button:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.04);
+          box-shadow: 0 7px 15px rgba(8, 127, 140, .2);
+        }
+        .app button:disabled {
+          opacity: .55;
+          cursor: not-allowed;
+          transform: none;
+        }
+        .app input, .app select, .app textarea, .search-box {
+          max-width: 100%;
+          border: 1px solid #d8e2ee;
+          border-radius: 10px;
+          padding: 11px 13px;
+          background: #fbfdff;
+          color: #1d2f46;
+          font: inherit;
+          font-size: 14px;
+          outline: none;
+          transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+        .app input:focus, .app select:focus, .app textarea:focus, .search-box:focus {
+          border-color: #1595a1;
+          background: #fff;
+          box-shadow: 0 0 0 3px rgba(21,149,161,.12);
+        }
+        .search-box {
+          width: 100%;
+          margin: 4px 0 12px;
+        }
+        .form-section {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+        }
+        .form-section h2, .form-section h3 {
+          flex-basis: 100%;
+        }
+        .form-section textarea {
+          flex-basis: 100%;
+          min-height: 125px;
+          resize: vertical;
+        }
+        .app table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          overflow: hidden;
+          border: 1px solid #e4ebf3;
+          border-radius: 12px;
+          background: #fff;
+          font-size: 13px;
+        }
+        .app thead th {
+          padding: 13px 14px;
+          background: #edf4f9;
+          color: #36536d;
+          text-align: left;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: .25px;
+          white-space: nowrap;
+        }
+        .app tbody td {
+          padding: 13px 14px;
+          border-top: 1px solid #edf1f6;
+          color: #42546a;
+          vertical-align: middle;
+        }
+        .app tbody tr:hover td {
+          background: #f7fbfd;
+        }
+        .app footer {
+          margin-top: 30px;
+          padding: 22px;
+          background: #102b50;
+          color: rgba(255,255,255,.75);
+          text-align: center;
+          font-size: 12px;
+          letter-spacing: .3px;
+        }
+        @media (max-width: 900px) {
+          .navbar { position: relative; }
+          .navbar > div[style*="margin-left"] { margin-left: 0 !important; }
+          .nav-links { width: 100%; }
+          .nav-links button { flex: 1 1 auto; }
+        }
+        @media (max-width: 600px) {
+          .container { width: min(100% - 26px, 1440px); padding-top: 24px; }
+          .navbar { padding: 14px; }
+          .logo { font-size: 18px; }
+          .nav-links { gap: 5px; }
+          .nav-links button { padding: 8px 10px; font-size: 12px; }
+          .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+          .card { min-height: 116px; padding: 15px; }
+          .card h2 { font-size: 25px; }
+          .section, .form-section { padding: 16px; border-radius: 14px; }
+          .app table { min-width: 600px; }
+          .section { overflow-x: auto; }
+        }
+      `}</style>
+
+
       {/* NAVBAR */}
 
       <nav className="navbar">
@@ -1276,7 +1609,7 @@ const searchAsset = async () => {
             }}
           >
             {currentUser.name} (
-            {isAdmin ? "Administrator" : "Viewer"})
+            {isAdmin ? "Administrator" : "Student"})
           </div>
         )}
 
@@ -1360,6 +1693,13 @@ const searchAsset = async () => {
             }
           >
             Reports
+          </button>
+
+          <button
+            className={activePage === "Feedback" ? "active-nav" : ""}
+            onClick={() => setActivePage("Feedback")}
+          >
+            Feedback
           </button>
 
           <button
@@ -2445,56 +2785,51 @@ const searchAsset = async () => {
                 <input
                   type="text"
                   placeholder="Asset Name e.g. Computer, Bench, Chair"
-                  value={
-                    roomAssetName
-                  }
-                  onChange={(e) =>
-                    setRoomAssetName(
-                      e.target.value
-                    )
-                  }
+                  value={roomAssetName}
+                  onChange={(e) => setRoomAssetName(e.target.value)}
+                />
+
+                <input
+                  type="text"
+                  placeholder="Category e.g. Electrical, Furniture, Computer"
+                  value={roomAssetCategory}
+                  onChange={(e) => setRoomAssetCategory(e.target.value)}
                 />
 
                 <input
                   type="number"
+                  min="0"
+                  step="1"
                   placeholder="Quantity"
-                  value={
-                    roomAssetQuantity
-                  }
-                  onChange={(e) =>
-                    setRoomAssetQuantity(
-                      e.target.value
-                    )
-                  }
+                  value={roomAssetQuantity}
+                  onChange={(e) => setRoomAssetQuantity(e.target.value)}
                 />
 
+                {editingRoomAssetId !== null && (
+                  <select
+                    value={roomAssetDestinationId ?? ""}
+                    onChange={(e) =>
+                      setRoomAssetDestinationId(
+                        e.target.value === "" ? null : Number(e.target.value)
+                      )
+                    }
+                  >
+                    <option value="">Select destination room</option>
+                    {rooms.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        Block {room.block_no} - {room.floor_name} - {getRoomDisplayName(room)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
                 <select
-                  value={
-                    roomAssetStatus
-                  }
-                  onChange={(e) =>
-                    setRoomAssetStatus(
-                      e.target.value
-                    )
-                  }
+                  value={roomAssetStatus}
+                  onChange={(e) => setRoomAssetStatus(e.target.value)}
                 >
-
-                  <option value="Good">
-                    Good
-                  </option>
-
-                  <option value="Damaged">
-                    Damaged
-                  </option>
-
-                  <option value="Needs Repair">
-                    Needs Repair
-                  </option>
-
-                  <option value="Not Available">
-                    Not Available
-                  </option>
-
+                  <option value="Working">Working</option>
+                  <option value="Repair">Repair</option>
+                  <option value="Not Working">Not Working</option>
                 </select>
 
                 <button
@@ -4026,6 +4361,70 @@ const searchAsset = async () => {
 
         </div>
 
+      )}
+
+      {/* =========================
+          STUDENT / ADMIN FEEDBACK
+          ========================= */}
+
+      {activePage === "Feedback" && (
+        <div className="container">
+          <h1>{isAdmin ? "Student Feedback" : "Feedback"}</h1>
+          <p className="subtitle">
+            {isAdmin
+              ? "Feedback messages submitted by students"
+              : "Share your suggestions or concerns with the administrator"}
+          </p>
+
+          {!isAdmin && (
+            <div className="form-section">
+              <h2>Send Feedback to Administrator</h2>
+              <textarea
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+                placeholder="Write your feedback here..."
+                rows={5}
+                style={{ width: "100%", padding: "12px", marginBottom: "12px" }}
+              />
+              <button onClick={submitFeedback}>Submit Feedback</button>
+            </div>
+          )}
+
+          <div className="section">
+            <h2>{isAdmin ? "All Student Feedback" : "My Submitted Feedback"}</h2>
+            {feedbackLoading ? (
+              <p>Loading feedback...</p>
+            ) : feedbackError ? (
+              <p style={{ color: "#dc2626" }}>{feedbackError}</p>
+            ) : feedbackItems.length === 0 ? (
+              <p>No feedback found.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      {isAdmin && <th>Student Name</th>}
+                      <th>Feedback</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feedbackItems.map((item) => (
+                      <tr key={item.id}>
+                        {isAdmin && <td>{item.student_name}</td>}
+                        <td style={{ whiteSpace: "pre-wrap" }}>{item.message}</td>
+                        <td>{item.created_at ? new Date(item.created_at).toLocaleString() : "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <button onClick={loadFeedback} style={{ marginTop: "15px" }}>
+              Refresh Feedback
+            </button>
+          </div>
+        </div>
       )}
 
       <footer>
