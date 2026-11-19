@@ -268,7 +268,9 @@ def home():
 
     return {
 
-        "message": "Smart Inventory API is running"
+        "message": "Smart Inventory API is running",
+        "has_database_url": bool(os.getenv("DATABASE_URL")),
+        "db_host_target": str(engine.url).split("@")[-1]
 
     }
 
