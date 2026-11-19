@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS inventory (
 
 CREATE TABLE IF NOT EXISTS assets (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    asset_id VARCHAR(100) NOT NULL UNIQUE,
+    asset_id VARCHAR(100) NOT NULL,
     asset_name VARCHAR(255) NOT NULL,
     location VARCHAR(255) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'Available'
@@ -37,9 +37,10 @@ CREATE TABLE IF NOT EXISTS room_assets (
     id INT AUTO_INCREMENT PRIMARY KEY,
     room_id INT NOT NULL,
     asset_name VARCHAR(255) NOT NULL,
-    category VARCHAR(100) DEFAULT 'General',
     quantity INT NOT NULL DEFAULT 1,
-    status VARCHAR(50) NOT NULL DEFAULT 'Working'
+    status VARCHAR(50) NOT NULL DEFAULT 'Working',
+    asset_code VARCHAR(50) DEFAULT NULL,
+    category VARCHAR(100) DEFAULT 'General'
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
