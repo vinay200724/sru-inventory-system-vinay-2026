@@ -7,15 +7,11 @@ function getBaseUrl(): string {
   if (
     typeof window !== "undefined" &&
     window.location &&
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1"
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ) {
-    return "https://sru-inventory-system-vinay-2026.onrender.com";
+    return "http://127.0.0.1:8000";
   }
-  if (import.meta.env.PROD) {
-    return "https://sru-inventory-system-vinay-2026.onrender.com";
-  }
-  return "http://127.0.0.1:8000";
+  return "https://sru-inventory-backend-production.up.railway.app";
 }
 
 export const API_BASE_URL = getBaseUrl();
