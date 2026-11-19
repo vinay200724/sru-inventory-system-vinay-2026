@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN cp uvicorn_patch.py /usr/local/bin/uvicorn && chmod +x /usr/local/bin/uvicorn
+
 EXPOSE 8000
 
 CMD ["python", "main.py"]
